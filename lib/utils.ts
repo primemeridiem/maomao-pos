@@ -16,15 +16,15 @@ export const getBaseUrl = () => {
   // In production
   if (process.env.NODE_ENV === "production") {
     // First try VERCEL_URL (server-side, doesn't include protocol)
-    if (typeof process.env.VERCEL_URL !== "undefined" && process.env.VERCEL_URL) {
-      return `https://${process.env.VERCEL_URL}`;
+    if (typeof process.env.PRODUCTION_URL !== "undefined" && process.env.PRODUCTION_URL) {
+      return `https://${process.env.PRODUCTION_URL}`;
     }
     // Fallback to NEXT_PUBLIC_VERCEL_URL (client-side, includes protocol)
     if (
-      typeof process.env.NEXT_PUBLIC_VERCEL_URL !== "undefined" &&
-      process.env.NEXT_PUBLIC_VERCEL_URL
+      typeof process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL !== "undefined" &&
+      process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL
     ) {
-      return process.env.NEXT_PUBLIC_VERCEL_URL;
+      return `https://${process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL}`;
     }
     // Final fallback to NEXT_PUBLIC_APP_URL
     if (typeof process.env.NEXT_PUBLIC_APP_URL !== "undefined" && process.env.NEXT_PUBLIC_APP_URL) {
