@@ -1,71 +1,39 @@
 "use client";
 
-import { useSession, signOut } from "@/lib/auth-client";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import Link from "next/link";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "@/lib/auth-client";
+import { LoginForm } from "@/components/login-form";
 
 export default function Home() {
   const { data: session, isPending } = useSession();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isPending && session) {
+      router.push("/inventory");
+    }
+  }, [session, isPending, router]);
 
   if (isPending) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className='flex min-h-screen items-center justify-center'>
         <p>Loading...</p>
       </div>
     );
   }
 
+  // If not logged in, show login form
   if (!session) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-6">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Welcome to MaoMao POS</CardTitle>
-            <CardDescription>
-              Please sign in to access the application
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/login">
-              <Button className="w-full">Sign In</Button>
-            </Link>
-          </CardContent>
-        </Card>
+      <div className='flex min-h-svh w-full items-center justify-center p-6 md:p-10'>
+        <div className='w-full max-w-sm'>
+          <LoginForm />
+        </div>
       </div>
     );
   }
 
-  return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-6">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Welcome Back!</CardTitle>
-          <CardDescription>You are signed in</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-4">
-            {session.user.image && (
-              <img
-                src={session.user.image}
-                alt={session.user.name}
-                className="h-12 w-12 rounded-full"
-              />
-            )}
-            <div>
-              <p className="font-medium">{session.user.name}</p>
-              <p className="text-sm text-muted-foreground">{session.user.email}</p>
-            </div>
-          </div>
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() => signOut()}
-          >
-            Sign Out
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  // This should not render as we redirect, but just in case
+  return null;
 }
