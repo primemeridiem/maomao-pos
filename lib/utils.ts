@@ -24,7 +24,7 @@ export const getBaseUrl = () => {
       typeof process.env.NEXT_PUBLIC_VERCEL_URL !== "undefined" &&
       process.env.NEXT_PUBLIC_VERCEL_URL
     ) {
-      return process.env.NEXT_PUBLIC_VERCEL_URL;
+      return `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`;
     }
     // Final fallback to NEXT_PUBLIC_APP_URL
     if (typeof process.env.NEXT_PUBLIC_APP_URL !== "undefined" && process.env.NEXT_PUBLIC_APP_URL) {
