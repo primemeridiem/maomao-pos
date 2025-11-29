@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Package, DollarSign, Copy } from "lucide-react";
+import { Plus, Package, DollarSign, Copy, Edit2, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -15,6 +16,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { AddProductDialog } from "./add-product-dialog";
+import { updateProductPrice } from "@/lib/actions/inventory";
+import { useRouter } from "next/navigation";
 
 type Category = { id: string; name: string };
 
@@ -48,7 +51,11 @@ interface LotDetailViewProps {
 }
 
 export function LotDetailView({ lot, categories }: LotDetailViewProps) {
+  const router = useRouter();
   const [addProductOpen, setAddProductOpen] = useState(false);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [editPrice, setEditPrice] = useState<string>("");
+  const [isSaving, setIsSaving] = useState(false);
 
   const purchaseCost = parseFloat(lot.purchaseCost);
   const washingCost = parseFloat(lot.washingCost);
@@ -73,6 +80,36 @@ export function LotDetailView({ lot, categories }: LotDetailViewProps) {
       toast.success("Product name copied to clipboard");
     } catch (err) {
       toast.error("Failed to copy product name");
+    }
+  };
+
+  const startEditingPrice = (product: Product) => {
+    setEditingProductId(product.id);
+    setEditPrice(product.sellingPrice);
+  };
+
+  const cancelEditing = () => {
+    setEditingProductId(null);
+    setEditPrice("");
+  };
+
+  const savePrice = async (productId: string) => {
+    if (!editPrice || parseFloat(editPrice) <= 0) {
+      toast.error("Please enter a valid price");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await updateProductPrice(productId, editPrice);
+      toast.success("Price updated successfully");
+      setEditingProductId(null);
+      setEditPrice("");
+      router.refresh();
+    } catch (err) {
+      toast.error("Failed to update price");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -253,7 +290,56 @@ export function LotDetailView({ lot, categories }: LotDetailViewProps) {
                       </TableCell>
                       <TableCell className='tabular-nums'>฿{cost.toFixed(2)}</TableCell>
                       <TableCell className='font-medium tabular-nums'>
-                        ฿{price.toFixed(2)}
+                        {editingProductId === product.id ? (
+                          <div className='flex items-center gap-2'>
+                            <Input
+                              type='number'
+                              step='0.01'
+                              min='0'
+                              value={editPrice}
+                              onChange={(e) => setEditPrice(e.target.value)}
+                              className='w-24 h-8 text-sm'
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  savePrice(product.id);
+                                } else if (e.key === "Escape") {
+                                  cancelEditing();
+                                }
+                              }}
+                            />
+                            <Button
+                              variant='ghost'
+                              size='icon-sm'
+                              onClick={() => savePrice(product.id)}
+                              disabled={isSaving}
+                              title='Save price'
+                            >
+                              <Check className='h-3.5 w-3.5 text-green-600' />
+                            </Button>
+                            <Button
+                              variant='ghost'
+                              size='icon-sm'
+                              onClick={cancelEditing}
+                              disabled={isSaving}
+                              title='Cancel editing'
+                            >
+                              <X className='h-3.5 w-3.5 text-red-600' />
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className='flex items-center gap-2'>
+                            <span>฿{price.toFixed(2)}</span>
+                            <Button
+                              variant='ghost'
+                              size='icon-sm'
+                              onClick={() => startEditingPrice(product)}
+                              title='Edit price'
+                            >
+                              <Edit2 className='h-3.5 w-3.5' />
+                            </Button>
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge

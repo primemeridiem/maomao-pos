@@ -246,6 +246,21 @@ export async function markProductAsSold(id: string) {
   return updatedProduct;
 }
 
+export async function updateProductPrice(id: string, sellingPrice: string) {
+  const [updatedProduct] = await db
+    .update(product)
+    .set({ sellingPrice })
+    .where(eq(product.id, id))
+    .returning();
+
+  revalidatePath("/inventory");
+  // Revalidate the lot detail page if product has a lotId
+  if (updatedProduct.lotId) {
+    revalidatePath(`/inventory/lots/${updatedProduct.lotId}`);
+  }
+  return updatedProduct;
+}
+
 export async function deleteProduct(id: string) {
   await db.delete(product).where(eq(product.id, id));
   revalidatePath("/inventory");
