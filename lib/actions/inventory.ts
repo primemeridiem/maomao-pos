@@ -53,7 +53,11 @@ export async function getLots() {
   return await db.query.lot.findMany({
     with: {
       supplier: true,
-      products: true,
+      products: {
+        with: {
+          category: true,
+        },
+      },
     },
     orderBy: (lot, { desc }) => [desc(lot.purchaseDate)],
   });
