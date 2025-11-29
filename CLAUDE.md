@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Point of Sale (POS) system built with Next.js 15, using the App Router architecture. The project is in early development stages with mostly boilerplate code from `create-next-app`.
+This is a Point of Sale (POS) system for a second-hand clothing shop built with Next.js 15, using the App Router architecture. The system features lot-based inventory management where clothing batches are purchased from suppliers, with costs tracked per lot including purchase and washing expenses.
 
 ## Technology Stack
 
@@ -45,23 +45,39 @@ bun db:studio      # Open Drizzle Studio for database inspection
 ## Project Structure
 
 ```
-/app                 # Next.js App Router pages and layouts
-  /globals.css       # Global styles including Tailwind directives
-  /layout.tsx        # Root layout with font configuration
-  /page.tsx          # Home page component
-  /api               # API routes for Better Auth and other endpoints
-/lib                 # Utility functions and shared logic
-  /utils.ts          # cn() helper for merging Tailwind classes
-  /db.ts             # Drizzle database client instance
-  /auth.ts           # Better Auth configuration
-  /auth-client.ts    # Better Auth client for use in components
-  /env.ts            # Environment variable validation and type-safe access
-/db                  # Database related files
-  /schema.ts         # Drizzle schema definitions
-  /migrations        # Generated migration files
-/components          # React components (not created yet)
-  /ui                # shadcn/ui components will go here
-/public              # Static assets
+/app                      # Next.js App Router pages and layouts
+  /globals.css            # Global styles including Tailwind directives
+  /layout.tsx             # Root layout with font configuration
+  /page.tsx               # Home page component
+  /api                    # API routes for Better Auth and other endpoints
+  /dashboard              # Dashboard page
+  /inventory              # Inventory management pages
+    /page.tsx             # Main inventory page (lots view)
+    /lots/[id]/page.tsx   # Individual lot detail page
+  /login                  # Login page
+/lib                      # Utility functions and shared logic
+  /utils.ts               # cn() helper for merging Tailwind classes
+  /db.ts                  # Drizzle database client instance
+  /auth.ts                # Better Auth configuration
+  /auth-client.ts         # Better Auth client for use in components
+  /env.ts                 # Environment variable validation and type-safe access
+  /actions                # Server Actions
+    /inventory.ts         # Inventory CRUD operations
+/db                       # Database related files
+  /schema.ts              # Drizzle schema definitions (auth + inventory tables)
+  /migrations             # Generated migration files
+/components               # React components
+  /ui                     # shadcn/ui components
+  /inventory              # Inventory-specific components
+    /inventory-lots-view.tsx      # Lots table view
+    /lot-detail-view.tsx          # Individual lot detail with products
+    /products-tab.tsx             # All products overview
+    /add-lot-dialog.tsx           # Create new lot dialog
+    /add-product-dialog.tsx       # Add product to lot dialog
+  /app-sidebar.tsx        # Main application sidebar
+  /site-header.tsx        # Page header component
+/hooks                    # Custom React hooks
+/public                   # Static assets
 ```
 
 ## Architecture Notes
@@ -197,7 +213,67 @@ import { authClient } from "@/lib/auth-client"
 const { data: session } = authClient.useSession()
 ```
 
+### Inventory Management System
+
+This is a lot-based inventory system designed for a second-hand clothing shop. The business model involves purchasing batches (lots) of clothing from suppliers, washing them, and then selling individual items.
+
+**Core Concepts**:
+- **Lot**: A batch of clothing purchased from a supplier at a specific time
+  - Tracks purchase cost, washing cost, and calculates total cost and cost per item
+  - Items in a lot share the same averaged cost (total cost / total items)
+  - Identified by supplier name + purchase date (no separate lot number)
+- **Product**: Individual clothing items cataloged from a lot
+  - Each product references its source lot for cost tracking
+  - Has its own selling price, allowing margin calculation
+- **Supplier**: Vendors who provide clothing batches
+- **Category**: Clothing types (e.g., Shirts, Pants, Jackets)
+
+**Database Schema** (`/db/schema.ts`):
+```typescript
+// Core inventory tables
+category      - id, name, timestamps
+supplier      - id, name, phone, email, timestamps
+lot           - id, supplierId, purchaseCost, washingCost, totalCost,
+                totalItems, costPerItem, purchaseDate, notes, timestamps
+product       - id, name, barcode, categoryId, lotId, costPrice,
+                sellingPrice, stockQuantity, isSold, timestamps
+
+// Relations defined for type-safe joins
+```
+
+**Key Calculations**:
+- `totalCost = purchaseCost + washingCost`
+- `costPerItem = totalCost / totalItems`
+- `margin = ((sellingPrice - costPrice) / sellingPrice) * 100`
+
+**User Journey**:
+1. Add a lot (supplier, costs, total items count)
+2. Click on the lot row to view lot details
+3. Add individual products to the lot (inherits cost from lot's costPerItem)
+4. Products appear in both the lot detail view and the global products view
+
+**Server Actions** (`/lib/actions/inventory.ts`):
+- `createSupplier()`, `getSuppliers()`
+- `createCategory()`, `getCategories()`
+- `createLot()`, `getLots()`, `getLotById()`
+- `createProduct()`, `getProducts()`
+
+**UI Components**:
+- `InventoryLotsView` - Table of all lots with summary statistics
+- `LotDetailView` - Individual lot with cost breakdown and products list
+- `ProductsTab` - Overview of all products across all lots
+- `AddLotDialog` - Form to create new lots with inline supplier quick-add
+- `AddProductDialog` - Form to add products with inline category quick-add
+
+**UX Patterns**:
+- **Quick-add in dropdowns**: Select dropdowns include an "Add new..." option that reveals an inline form
+- **Cost inheritance**: Products default to the lot's costPerItem
+- **Progress tracking**: Shows how many products have been cataloged vs total items in lot
+- **Disable when complete**: "Add Product" button disables when all items in lot are cataloged
+
 ## Conventions
+
+### Code Conventions
 
 - Use React Server Components by default (Next.js App Router convention)
 - Add `"use client"` directive only when client-side features are needed
@@ -211,3 +287,65 @@ const { data: session } = authClient.useSession()
 - Always import environment variables from `@/lib/env`, never directly from `process.env`
 - Define all new env vars in `/lib/env.ts` with proper Zod validation
 - Use `server` section for secrets, `client` for NEXT_PUBLIC_ vars
+
+### UI/UX Conventions
+
+**Localization**:
+- Currency: Use Thai Baht symbol `฿` for all monetary values
+- Example: `฿{value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+**Number Formatting**:
+- Always use `tabular-nums` class for numerical displays to ensure proper alignment
+- Use `toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })` for currency amounts
+- Use `toLocaleString('en-US')` for whole numbers (item counts, quantities)
+- Example:
+  ```tsx
+  <div className="text-2xl font-bold tabular-nums">
+    ฿{totalCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+  </div>
+  ```
+
+**Form Patterns**:
+- Use controlled components for complex forms with state management
+- Reset state manually before closing dialogs (avoid using `e.currentTarget.reset()` after dialog close)
+- Close dialogs last in the submit handler to avoid null reference errors
+- Example pattern:
+  ```tsx
+  startTransition(async () => {
+    await createResource(data);
+    // Reset state first
+    setState("");
+    // Close dialog last
+    onOpenChange(false);
+  });
+  ```
+
+**Quick-Add Pattern**:
+- Implement inline quick-add forms within select dropdowns
+- Use a special value like `"__add_new__"` to trigger the inline form
+- Show inline form in a bordered container with cancel button
+- Example structure:
+  ```tsx
+  <Select onValueChange={(value) => {
+    if (value === "__add_new__") {
+      setShowQuickAdd(true);
+    } else {
+      setValue(value);
+    }
+  }}>
+    <SelectContent>
+      {items.map(item => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}
+      <SelectItem value="__add_new__" className="text-primary">
+        <div className="flex items-center gap-2">
+          <Plus className="h-4 w-4" />
+          <span>Add new...</span>
+        </div>
+      </SelectItem>
+    </SelectContent>
+  </Select>
+  ```
+
+**Data Display**:
+- Use `Badge` components for status indicators and categories
+- Apply variant based on context: `"default"` for positive, `"secondary"` for neutral, `"outline"` for low priority
+- Show margin badges with color coding: >50% default, >30% secondary, else outline
