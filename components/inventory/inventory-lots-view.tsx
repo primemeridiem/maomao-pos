@@ -3,17 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Package, DollarSign, Shirt, ChevronRight } from "lucide-react";
+import { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { InventoryDataTable, DataTableColumnHeader } from "@/components/ui/inventory-data-table";
 import { AddLotDialog } from "./add-lot-dialog";
 
 type Product = {
@@ -54,6 +48,117 @@ export function InventoryLotsView({ lots, suppliers }: InventoryLotsViewProps) {
   const totalItems = lots.reduce((acc, lot) => acc + lot.totalItems, 0);
   const totalProductsAdded = lots.reduce((acc, lot) => acc + lot.products.length, 0);
   const avgCostPerItem = totalItems > 0 ? totalInvestment / totalItems : 0;
+
+  const columns: ColumnDef<Lot>[] = [
+    {
+      accessorKey: "supplier.name",
+      id: "supplier",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Supplier" />,
+      cell: ({ row }) => <div className="font-medium">{row.original.supplier.name}</div>,
+    },
+    {
+      accessorKey: "purchaseDate",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Purchase Date" />,
+      cell: ({ row }) => (
+        <div>
+          {new Date(row.original.purchaseDate).toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          })}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "purchaseCost",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Purchase Cost" />,
+      cell: ({ row }) => {
+        const purchaseCost = parseFloat(row.original.purchaseCost);
+        return (
+          <div className="tabular-nums">
+            ฿
+            {purchaseCost.toLocaleString("en-US", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "washingCost",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Washing Cost" />,
+      cell: ({ row }) => {
+        const washingCost = parseFloat(row.original.washingCost);
+        return (
+          <div className="tabular-nums">
+            ฿
+            {washingCost.toLocaleString("en-US", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "totalCost",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Total Cost" />,
+      cell: ({ row }) => {
+        const totalCost = parseFloat(row.original.totalCost);
+        return (
+          <div className="font-medium tabular-nums">
+            ฿
+            {totalCost.toLocaleString("en-US", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "totalItems",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Items" />,
+      cell: ({ row }) => (
+        <div className="tabular-nums">{row.original.totalItems.toLocaleString("en-US")}</div>
+      ),
+    },
+    {
+      accessorKey: "costPerItem",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Cost/Item" />,
+      cell: ({ row }) => {
+        const costPerItem = parseFloat(row.original.costPerItem);
+        return (
+          <div className="font-medium tabular-nums">
+            ฿
+            {costPerItem.toLocaleString("en-US", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
+          </div>
+        );
+      },
+    },
+    {
+      id: "productsAdded",
+      header: "Products Added",
+      cell: ({ row }) => {
+        const progress = row.original.products.length;
+        const total = row.original.totalItems;
+        const isComplete = progress >= total;
+        return (
+          <Badge variant={isComplete ? "default" : "secondary"}>
+            {progress} / {total}
+          </Badge>
+        );
+      },
+    },
+    {
+      id: "actions",
+      cell: () => <ChevronRight className="h-4 w-4 text-muted-foreground" />,
+    },
+  ];
 
   return (
     <>
@@ -133,95 +238,13 @@ export function InventoryLotsView({ lots, suppliers }: InventoryLotsViewProps) {
           <CardDescription>Click on a lot to view details and add products</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Supplier</TableHead>
-                <TableHead>Purchase Date</TableHead>
-                <TableHead>Purchase Cost</TableHead>
-                <TableHead>Washing Cost</TableHead>
-                <TableHead>Total Cost</TableHead>
-                <TableHead>Items</TableHead>
-                <TableHead>Cost/Item</TableHead>
-                <TableHead>Products Added</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {lots.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={9} className='text-center text-muted-foreground py-12'>
-                    No lots found. Click &quot;Add Lot&quot; to get started.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                lots.map((lot) => {
-                  const purchaseCost = parseFloat(lot.purchaseCost);
-                  const washingCost = parseFloat(lot.washingCost);
-                  const totalCost = parseFloat(lot.totalCost);
-                  const progress = lot.products.length;
-                  const total = lot.totalItems;
-                  const isComplete = progress >= total;
-
-                  return (
-                    <TableRow
-                      key={lot.id}
-                      className='cursor-pointer hover:bg-muted/50'
-                      onClick={() => router.push(`/inventory/lots/${lot.id}`)}
-                    >
-                      <TableCell className='font-medium'>{lot.supplier.name}</TableCell>
-                      <TableCell>
-                        {new Date(lot.purchaseDate).toLocaleDateString("en-US", {
-                          year: "numeric",
-                          month: "2-digit",
-                          day: "2-digit",
-                        })}
-                      </TableCell>
-                      <TableCell className='tabular-nums'>
-                        ฿
-                        {purchaseCost.toLocaleString("en-US", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </TableCell>
-                      <TableCell className='tabular-nums'>
-                        ฿
-                        {washingCost.toLocaleString("en-US", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </TableCell>
-                      <TableCell className='font-medium tabular-nums'>
-                        ฿
-                        {totalCost.toLocaleString("en-US", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </TableCell>
-                      <TableCell className='tabular-nums'>
-                        {total.toLocaleString("en-US")}
-                      </TableCell>
-                      <TableCell className='font-medium tabular-nums'>
-                        ฿
-                        {parseFloat(lot.costPerItem).toLocaleString("en-US", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={isComplete ? "default" : "secondary"}>
-                          {progress} / {total}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <ChevronRight className='h-4 w-4 text-muted-foreground' />
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
+          <InventoryDataTable
+            columns={columns}
+            data={lots}
+            searchKey="supplier"
+            searchPlaceholder="Search by supplier..."
+            onRowClick={(lot) => router.push(`/inventory/lots/${lot.id}`)}
+          />
         </CardContent>
       </Card>
 

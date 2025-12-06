@@ -178,6 +178,45 @@ export const product = pgTable(
   ]
 );
 
+// Sales transactions
+export const sale = pgTable(
+  "sale",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
+    paymentMethod: text("payment_method").default("cash").notNull(), // cash, card, transfer
+    notes: text("notes"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("sale_createdAt_idx").on(table.createdAt)]
+);
+
+// Sale items (line items for each sale)
+export const saleItem = pgTable(
+  "sale_item",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    saleId: text("sale_id")
+      .notNull()
+      .references(() => sale.id, { onDelete: "cascade" }),
+    productId: text("product_id")
+      .notNull()
+      .references(() => product.id),
+    quantity: integer("quantity").notNull(),
+    unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(), // Price at time of sale
+    subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull(), // quantity * unitPrice
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("saleItem_saleId_idx").on(table.saleId),
+    index("saleItem_productId_idx").on(table.productId),
+  ]
+);
+
 // Relations
 export const categoryRelations = relations(category, ({ many }) => ({
   products: many(product),
@@ -195,7 +234,7 @@ export const lotRelations = relations(lot, ({ one, many }) => ({
   products: many(product),
 }));
 
-export const productRelations = relations(product, ({ one }) => ({
+export const productRelations = relations(product, ({ one, many }) => ({
   category: one(category, {
     fields: [product.categoryId],
     references: [category.id],
@@ -203,5 +242,21 @@ export const productRelations = relations(product, ({ one }) => ({
   lot: one(lot, {
     fields: [product.lotId],
     references: [lot.id],
+  }),
+  saleItems: many(saleItem),
+}));
+
+export const saleRelations = relations(sale, ({ many }) => ({
+  items: many(saleItem),
+}));
+
+export const saleItemRelations = relations(saleItem, ({ one }) => ({
+  sale: one(sale, {
+    fields: [saleItem.saleId],
+    references: [sale.id],
+  }),
+  product: one(product, {
+    fields: [saleItem.productId],
+    references: [product.id],
   }),
 }));

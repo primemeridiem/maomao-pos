@@ -29,6 +29,13 @@
       "when": 1764409632445,
       "tag": "0003_unknown_lyja",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1764422144712,
+      "tag": "0004_square_tana_nile",
+      "breakpoints": true
     }
   ]
 }

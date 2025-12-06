@@ -1,22 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Package, DollarSign, Copy, Edit2, Check, X } from "lucide-react";
+import { useState, useTransition } from "react";
+import { Plus, Package, DollarSign, Copy, Edit2, Check, X, Pencil } from "lucide-react";
+import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { InventoryDataTable, DataTableColumnHeader } from "@/components/ui/inventory-data-table";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { AddProductDialog } from "./add-product-dialog";
-import { updateProductPrice } from "@/lib/actions/inventory";
+import { updateProductPrice, updateProductName } from "@/lib/actions/inventory";
 import { useRouter } from "next/navigation";
 
 type Category = { id: string; name: string };
@@ -56,6 +58,10 @@ export function LotDetailView({ lot, categories }: LotDetailViewProps) {
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [editPrice, setEditPrice] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
+  const [showEditNameDialog, setShowEditNameDialog] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [newProductName, setNewProductName] = useState("");
+  const [isPending, startTransition] = useTransition();
 
   const purchaseCost = parseFloat(lot.purchaseCost);
   const washingCost = parseFloat(lot.washingCost);
@@ -112,6 +118,213 @@ export function LotDetailView({ lot, categories }: LotDetailViewProps) {
       setIsSaving(false);
     }
   };
+
+  const openEditNameDialog = (product: Product) => {
+    setEditingProduct(product);
+    setNewProductName(product.name);
+    setShowEditNameDialog(true);
+  };
+
+  const handleUpdateName = () => {
+    if (!editingProduct || !newProductName.trim()) return;
+
+    startTransition(async () => {
+      try {
+        await updateProductName(editingProduct.id, newProductName.trim());
+        toast.success("Product name updated successfully");
+        router.refresh();
+        setShowEditNameDialog(false);
+        setEditingProduct(null);
+        setNewProductName("");
+      } catch (error) {
+        console.error("Failed to update product name:", error);
+        toast.error("Failed to update product name");
+      }
+    });
+  };
+
+  const columns: ColumnDef<Product>[] = [
+    {
+      accessorKey: "name",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
+      cell: ({ row }) => (
+        <div className="flex items-center gap-1 font-medium">
+          <span>{row.original.name}</span>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              openEditNameDialog(row.original);
+            }}
+            title="Edit product name"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              copyName(row.original.name);
+            }}
+            title="Copy product name"
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ),
+    },
+    {
+      accessorKey: "barcode",
+      header: "Barcode",
+      cell: ({ row }) => {
+        if (!row.original.barcode) {
+          return <span className="text-muted-foreground">-</span>;
+        }
+        return (
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-sm">{row.original.barcode}</span>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                copyBarcode(row.original.barcode!);
+              }}
+              title="Copy barcode"
+            >
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "category.name",
+      id: "category",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Category" />,
+      cell: ({ row }) => {
+        if (!row.original.category) {
+          return <span className="text-muted-foreground">-</span>;
+        }
+        return <Badge variant="outline">{row.original.category.name}</Badge>;
+      },
+    },
+    {
+      accessorKey: "costPrice",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Cost" />,
+      cell: ({ row }) => {
+        const cost = parseFloat(row.original.costPrice);
+        return <div className="tabular-nums">฿{cost.toFixed(2)}</div>;
+      },
+    },
+    {
+      accessorKey: "sellingPrice",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Price" />,
+      cell: ({ row }) => {
+        const product = row.original;
+        const price = parseFloat(product.sellingPrice);
+
+        if (editingProductId === product.id) {
+          return (
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={editPrice}
+                onChange={(e) => setEditPrice(e.target.value)}
+                className="w-24 h-8 text-sm"
+                autoFocus
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.stopPropagation();
+                    savePrice(product.id);
+                  } else if (e.key === "Escape") {
+                    e.stopPropagation();
+                    cancelEditing();
+                  }
+                }}
+              />
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  savePrice(product.id);
+                }}
+                disabled={isSaving}
+                title="Save price"
+              >
+                <Check className="h-3.5 w-3.5 text-green-600" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  cancelEditing();
+                }}
+                disabled={isSaving}
+                title="Cancel editing"
+              >
+                <X className="h-3.5 w-3.5 text-red-600" />
+              </Button>
+            </div>
+          );
+        }
+
+        return (
+          <div className="flex items-center gap-2 font-medium tabular-nums">
+            <span>฿{price.toFixed(2)}</span>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                startEditingPrice(product);
+              }}
+              title="Edit price"
+            >
+              <Edit2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        );
+      },
+    },
+    {
+      id: "margin",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Margin" />,
+      cell: ({ row }) => {
+        const cost = parseFloat(row.original.costPrice);
+        const price = parseFloat(row.original.sellingPrice);
+        const margin = ((price - cost) / price) * 100;
+        return (
+          <Badge variant={margin > 50 ? "default" : margin > 30 ? "secondary" : "outline"}>
+            {margin.toFixed(0)}%
+          </Badge>
+        );
+      },
+    },
+    {
+      accessorKey: "stockQuantity",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Qty" />,
+      cell: ({ row }) => <div>{row.original.stockQuantity}</div>,
+    },
+    {
+      accessorKey: "isSold",
+      header: "Status",
+      cell: ({ row }) => {
+        return row.original.isSold ? (
+          <Badge variant="secondary">Sold</Badge>
+        ) : (
+          <Badge>Available</Badge>
+        );
+      },
+    },
+  ];
 
   return (
     <>
@@ -230,140 +443,62 @@ export function LotDetailView({ lot, categories }: LotDetailViewProps) {
               <p>Start adding products from this lot</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Barcode</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Cost</TableHead>
-                  <TableHead>Price</TableHead>
-                  <TableHead>Margin</TableHead>
-                  <TableHead>Qty</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {lot.products.map((product) => {
-                  const cost = parseFloat(product.costPrice);
-                  const price = parseFloat(product.sellingPrice);
-                  const margin = ((price - cost) / price) * 100;
-
-                  return (
-                    <TableRow key={product.id}>
-                      <TableCell className='font-medium'>
-                        <div className='flex items-center gap-2'>
-                          <span>{product.name}</span>
-                          <Button
-                            variant='ghost'
-                            size='icon-sm'
-                            onClick={() => copyName(product.name)}
-                            title='Copy product name'
-                          >
-                            <Copy className='h-3.5 w-3.5' />
-                          </Button>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {product.barcode ? (
-                          <div className='flex items-center gap-2'>
-                            <span className='font-mono text-sm'>{product.barcode}</span>
-                            <Button
-                              variant='ghost'
-                              size='icon-sm'
-                              onClick={() => copyBarcode(product.barcode!)}
-                              title='Copy barcode'
-                            >
-                              <Copy className='h-3.5 w-3.5' />
-                            </Button>
-                          </div>
-                        ) : (
-                          <span className='text-muted-foreground'>-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {product.category ? (
-                          <Badge variant='outline'>{product.category.name}</Badge>
-                        ) : (
-                          <span className='text-muted-foreground'>-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className='tabular-nums'>฿{cost.toFixed(2)}</TableCell>
-                      <TableCell className='font-medium tabular-nums'>
-                        {editingProductId === product.id ? (
-                          <div className='flex items-center gap-2'>
-                            <Input
-                              type='number'
-                              step='0.01'
-                              min='0'
-                              value={editPrice}
-                              onChange={(e) => setEditPrice(e.target.value)}
-                              className='w-24 h-8 text-sm'
-                              autoFocus
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  savePrice(product.id);
-                                } else if (e.key === "Escape") {
-                                  cancelEditing();
-                                }
-                              }}
-                            />
-                            <Button
-                              variant='ghost'
-                              size='icon-sm'
-                              onClick={() => savePrice(product.id)}
-                              disabled={isSaving}
-                              title='Save price'
-                            >
-                              <Check className='h-3.5 w-3.5 text-green-600' />
-                            </Button>
-                            <Button
-                              variant='ghost'
-                              size='icon-sm'
-                              onClick={cancelEditing}
-                              disabled={isSaving}
-                              title='Cancel editing'
-                            >
-                              <X className='h-3.5 w-3.5 text-red-600' />
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className='flex items-center gap-2'>
-                            <span>฿{price.toFixed(2)}</span>
-                            <Button
-                              variant='ghost'
-                              size='icon-sm'
-                              onClick={() => startEditingPrice(product)}
-                              title='Edit price'
-                            >
-                              <Edit2 className='h-3.5 w-3.5' />
-                            </Button>
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={margin > 50 ? "default" : margin > 30 ? "secondary" : "outline"}
-                        >
-                          {margin.toFixed(0)}%
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{product.stockQuantity}</TableCell>
-                      <TableCell>
-                        {product.isSold ? (
-                          <Badge variant='secondary'>Sold</Badge>
-                        ) : (
-                          <Badge>Available</Badge>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <InventoryDataTable
+              columns={columns}
+              data={lot.products}
+              searchKey="name"
+              searchPlaceholder="Search products by name..."
+            />
           )}
         </CardContent>
       </Card>
+
+      {/* Edit Product Name Dialog */}
+      <Dialog open={showEditNameDialog} onOpenChange={setShowEditNameDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Product Name</DialogTitle>
+            <DialogDescription>Update the name for this product.</DialogDescription>
+          </DialogHeader>
+          <div className='space-y-4 py-4'>
+            <div className='space-y-2'>
+              <Label htmlFor='productName'>Product Name</Label>
+              <Input
+                id='productName'
+                value={newProductName}
+                onChange={(e) => setNewProductName(e.target.value)}
+                placeholder='Enter product name'
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleUpdateName();
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <div className='flex gap-2'>
+            <Button
+              className='flex-1'
+              onClick={handleUpdateName}
+              disabled={isPending || !newProductName.trim()}
+            >
+              {isPending ? "Updating..." : "Update Name"}
+            </Button>
+            <Button
+              variant='outline'
+              onClick={() => {
+                setShowEditNameDialog(false);
+                setEditingProduct(null);
+                setNewProductName("");
+              }}
+              disabled={isPending}
+            >
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <AddProductDialog
         open={addProductOpen}

@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { category, supplier, lot, product } from "@/db/schema";
+import { category, supplier, lot, product, sale, saleItem } from "@/db/schema";
 import { eq, and, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -250,6 +250,21 @@ export async function markProductAsSold(id: string) {
   return updatedProduct;
 }
 
+export async function updateProductName(id: string, name: string) {
+  const [updatedProduct] = await db
+    .update(product)
+    .set({ name })
+    .where(eq(product.id, id))
+    .returning();
+
+  revalidatePath("/inventory");
+  // Revalidate the lot detail page if product has a lotId
+  if (updatedProduct.lotId) {
+    revalidatePath(`/inventory/lots/${updatedProduct.lotId}`);
+  }
+  return updatedProduct;
+}
+
 export async function updateProductPrice(id: string, sellingPrice: string) {
   const [updatedProduct] = await db
     .update(product)
@@ -268,4 +283,111 @@ export async function updateProductPrice(id: string, sellingPrice: string) {
 export async function deleteProduct(id: string) {
   await db.delete(product).where(eq(product.id, id));
   revalidatePath("/inventory");
+}
+
+export async function addProductStock(id: string, quantityToAdd: number) {
+  const [currentProduct] = await db
+    .select()
+    .from(product)
+    .where(eq(product.id, id));
+
+  if (!currentProduct) {
+    throw new Error("Product not found");
+  }
+
+  const newStockQuantity = currentProduct.stockQuantity + quantityToAdd;
+
+  const [updatedProduct] = await db
+    .update(product)
+    .set({
+      stockQuantity: newStockQuantity,
+      isSold: false, // Mark as not sold if we're adding stock
+    })
+    .where(eq(product.id, id))
+    .returning();
+
+  revalidatePath("/inventory");
+  revalidatePath("/inventory/add-stock");
+  if (updatedProduct.lotId) {
+    revalidatePath(`/inventory/lots/${updatedProduct.lotId}`);
+  }
+  return updatedProduct;
+}
+
+// ============================================================================
+// Sales
+// ============================================================================
+
+export async function completeSale(data: {
+  items: Array<{
+    productId: string;
+    quantity: number;
+    unitPrice: string;
+  }>;
+  paymentMethod?: string;
+  notes?: string;
+}) {
+  // Calculate total
+  const totalAmount = data.items.reduce((sum, item) => {
+    return sum + parseFloat(item.unitPrice) * item.quantity;
+  }, 0);
+
+  // Use a transaction to ensure all operations succeed or fail together
+  return await db.transaction(async (tx) => {
+    // 1. Create the sale record
+    const [newSale] = await tx
+      .insert(sale)
+      .values({
+        totalAmount: totalAmount.toFixed(2),
+        paymentMethod: data.paymentMethod || "cash",
+        notes: data.notes,
+      })
+      .returning();
+
+    // 2. Create sale items and update products
+    for (const item of data.items) {
+      // Create sale item
+      const subtotal = parseFloat(item.unitPrice) * item.quantity;
+      await tx.insert(saleItem).values({
+        saleId: newSale.id,
+        productId: item.productId,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        subtotal: subtotal.toFixed(2),
+      });
+
+      // Update product: decrease stock quantity
+      const [currentProduct] = await tx
+        .select()
+        .from(product)
+        .where(eq(product.id, item.productId));
+
+      if (!currentProduct) {
+        throw new Error(`Product ${item.productId} not found`);
+      }
+
+      const newStockQuantity = currentProduct.stockQuantity - item.quantity;
+
+      if (newStockQuantity < 0) {
+        throw new Error(
+          `Insufficient stock for product ${currentProduct.name}`
+        );
+      }
+
+      // Update product
+      await tx
+        .update(product)
+        .set({
+          stockQuantity: newStockQuantity,
+          isSold: newStockQuantity === 0,
+          soldAt: newStockQuantity === 0 ? new Date() : currentProduct.soldAt,
+        })
+        .where(eq(product.id, item.productId));
+    }
+
+    revalidatePath("/checkout");
+    revalidatePath("/inventory");
+
+    return newSale;
+  });
 }
