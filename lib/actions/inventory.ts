@@ -327,67 +327,79 @@ export async function completeSale(data: {
   paymentMethod?: string;
   notes?: string;
 }) {
-  // Calculate total
-  const totalAmount = data.items.reduce((sum, item) => {
-    return sum + parseFloat(item.unitPrice) * item.quantity;
-  }, 0);
-
-  // Use a transaction to ensure all operations succeed or fail together
-  return await db.transaction(async (tx) => {
-    // 1. Create the sale record
-    const [newSale] = await tx
-      .insert(sale)
-      .values({
-        totalAmount: totalAmount.toFixed(2),
-        paymentMethod: data.paymentMethod || "cash",
-        notes: data.notes,
-      })
-      .returning();
-
-    // 2. Create sale items and update products
-    for (const item of data.items) {
-      // Create sale item
-      const subtotal = parseFloat(item.unitPrice) * item.quantity;
-      await tx.insert(saleItem).values({
-        saleId: newSale.id,
-        productId: item.productId,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        subtotal: subtotal.toFixed(2),
-      });
-
-      // Update product: decrease stock quantity
-      const [currentProduct] = await tx
-        .select()
-        .from(product)
-        .where(eq(product.id, item.productId));
-
-      if (!currentProduct) {
-        throw new Error(`Product ${item.productId} not found`);
-      }
-
-      const newStockQuantity = currentProduct.stockQuantity - item.quantity;
-
-      if (newStockQuantity < 0) {
-        throw new Error(
-          `Insufficient stock for product ${currentProduct.name}`
-        );
-      }
-
-      // Update product
-      await tx
-        .update(product)
-        .set({
-          stockQuantity: newStockQuantity,
-          isSold: newStockQuantity === 0,
-          soldAt: newStockQuantity === 0 ? new Date() : currentProduct.soldAt,
-        })
-        .where(eq(product.id, item.productId));
+  try {
+    // Validate input
+    if (!data.items || data.items.length === 0) {
+      throw new Error("No items in sale");
     }
+
+    // Calculate total
+    const totalAmount = data.items.reduce((sum, item) => {
+      return sum + parseFloat(item.unitPrice) * item.quantity;
+    }, 0);
+
+    // Use a transaction to ensure all operations succeed or fail together
+    const result = await db.transaction(async (tx) => {
+      // 1. Create the sale record
+      const [newSale] = await tx
+        .insert(sale)
+        .values({
+          totalAmount: totalAmount.toFixed(2),
+          paymentMethod: data.paymentMethod || "cash",
+          notes: data.notes,
+        })
+        .returning();
+
+      // 2. Create sale items and update products
+      for (const item of data.items) {
+        // Create sale item
+        const subtotal = parseFloat(item.unitPrice) * item.quantity;
+        await tx.insert(saleItem).values({
+          saleId: newSale.id,
+          productId: item.productId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          subtotal: subtotal.toFixed(2),
+        });
+
+        // Update product: decrease stock quantity
+        const [currentProduct] = await tx
+          .select()
+          .from(product)
+          .where(eq(product.id, item.productId));
+
+        if (!currentProduct) {
+          throw new Error(`Product ${item.productId} not found`);
+        }
+
+        const newStockQuantity = currentProduct.stockQuantity - item.quantity;
+
+        if (newStockQuantity < 0) {
+          throw new Error(
+            `Insufficient stock for product ${currentProduct.name}`
+          );
+        }
+
+        // Update product
+        await tx
+          .update(product)
+          .set({
+            stockQuantity: newStockQuantity,
+            isSold: newStockQuantity === 0,
+            soldAt: newStockQuantity === 0 ? new Date() : currentProduct.soldAt,
+          })
+          .where(eq(product.id, item.productId));
+      }
+
+      return newSale;
+    });
 
     revalidatePath("/checkout");
     revalidatePath("/inventory");
 
-    return newSale;
-  });
+    return result;
+  } catch (error) {
+    console.error("Error completing sale:", error);
+    throw error;
+  }
 }

@@ -133,7 +133,7 @@ export function CheckoutView({ products }: CheckoutViewProps) {
       const target = e.target as HTMLElement;
       const tagName = target.tagName.toLowerCase();
 
-      // If not focused on an input/textarea, focus the search input
+      // If not fScreenshot 2568-12-07 at 12.24.10.pngocused on an input/textarea, focus the search input
       if (tagName !== "input" && tagName !== "textarea") {
         searchInputRef.current?.focus();
       }
@@ -242,6 +242,8 @@ export function CheckoutView({ products }: CheckoutViewProps) {
       0
     );
 
+    console.log("Starting checkout:", { paymentMethod, saleTotal, cartItems: cart.length });
+
     // Validate cash payment amount
     if (paymentMethod === "cash") {
       const paidAmount = parseFloat(amountPaid);
@@ -267,6 +269,7 @@ export function CheckoutView({ products }: CheckoutViewProps) {
 
     startTransition(async () => {
       try {
+        console.log("Calling completeSale...");
         await completeSale({
           items: cart.map((item) => ({
             productId: item.id,
@@ -275,6 +278,8 @@ export function CheckoutView({ products }: CheckoutViewProps) {
           })),
           paymentMethod: paymentMethod,
         });
+
+        console.log("Sale completed successfully");
 
         const paidAmount = paymentMethod === "cash" ? parseFloat(amountPaid) : saleTotal;
         const changeAmount = paymentMethod === "cash" ? paidAmount - saleTotal : 0;
@@ -302,9 +307,10 @@ export function CheckoutView({ products }: CheckoutViewProps) {
         searchInputRef.current?.focus();
       } catch (error) {
         console.error("Failed to complete purchase:", error);
+        const errorMsg = error instanceof Error ? error.message : "Unknown error occurred";
         setErrorMessage({
           title: "Purchase Failed",
-          message: "Failed to complete purchase. Please try again.",
+          message: errorMsg,
         });
         setShowErrorDialog(true);
       }
@@ -355,7 +361,7 @@ export function CheckoutView({ products }: CheckoutViewProps) {
       {/* Main Layout: Products List + Shopping Cart */}
       <div className='grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 flex-1 overflow-hidden'>
         {/* Left: Products List */}
-        <Card className='flex flex-col'>
+        <Card className='flex flex-col h-[calc(100vh-10rem)]'>
           <CardHeader>
             <CardTitle>Products</CardTitle>
           </CardHeader>
@@ -410,94 +416,99 @@ export function CheckoutView({ products }: CheckoutViewProps) {
         </Card>
 
         {/* Right: Shopping Cart */}
-        <Card className='flex flex-col'>
-          <CardHeader>
+        <Card className='flex flex-col h-[calc(100vh-10rem)]'>
+          <CardHeader className='shrink-0'>
             <CardTitle className='flex items-center gap-2'>
               <ShoppingCart className='h-5 w-5' />
               Shopping Cart ({totalItems})
             </CardTitle>
           </CardHeader>
-          <CardContent className='flex-1 flex flex-col overflow-hidden'>
-            <ScrollArea className='flex-1 pr-4'>
-              {cart.length === 0 ? (
-                <div className='text-center py-12'>
-                  <ShoppingCart className='h-12 w-12 mx-auto text-muted-foreground mb-3' />
-                  <p className='text-muted-foreground'>Cart is empty</p>
-                  <p className='text-sm text-muted-foreground mt-1'>
-                    Scan a barcode or click a product to add
-                  </p>
-                </div>
-              ) : (
-                <div className='space-y-3'>
-                  {cart.map((item) => (
-                    <div key={item.id} className='flex items-start gap-3 p-3 rounded-lg border'>
-                      <div className='flex-1 min-w-0'>
-                        <p className='font-medium'>{item.name}</p>
-                        {item.category && (
-                          <Badge variant='secondary' className='text-xs mt-1'>
-                            {item.category.name}
-                          </Badge>
-                        )}
-                        <p className='text-sm text-muted-foreground mt-1 tabular-nums'>
-                          ฿
-                          {parseFloat(item.sellingPrice).toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}{" "}
-                          each
-                        </p>
-                      </div>
-                      <div className='flex items-center gap-2'>
-                        <Button
-                          variant='outline'
-                          size='icon'
-                          className='h-8 w-8'
-                          onClick={() => updateQuantity(item.id, -1)}
-                        >
-                          <Minus className='h-4 w-4' />
-                        </Button>
-                        <span className='w-8 text-center font-medium tabular-nums'>
-                          {item.quantity}
-                        </span>
-                        <Button
-                          variant='outline'
-                          size='icon'
-                          className='h-8 w-8'
-                          onClick={() => updateQuantity(item.id, 1)}
-                        >
-                          <Plus className='h-4 w-4' />
-                        </Button>
-                        <Button
-                          variant='ghost'
-                          size='icon'
-                          className='h-8 w-8 text-destructive'
-                          onClick={() => removeFromCart(item.id)}
-                        >
-                          <Trash2 className='h-4 w-4' />
-                        </Button>
-                      </div>
-                      <div className='text-right'>
-                        <p className='font-bold tabular-nums'>
-                          ฿
-                          {(parseFloat(item.sellingPrice) * item.quantity).toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </p>
-                      </div>
+          <CardContent className='flex-1 flex flex-col min-h-0 overflow-hidden p-0'>
+            {/* Scrollable cart items */}
+            <div className='flex-1 min-h-0 overflow-hidden'>
+              <ScrollArea className='h-full px-6 pt-6'>
+                <div className='pr-4 pb-4'>
+                  {cart.length === 0 ? (
+                    <div className='text-center py-12'>
+                      <ShoppingCart className='h-12 w-12 mx-auto text-muted-foreground mb-3' />
+                      <p className='text-muted-foreground'>Cart is empty</p>
+                      <p className='text-sm text-muted-foreground mt-1'>
+                        Scan a barcode or click a product to add
+                      </p>
                     </div>
-                  ))}
+                  ) : (
+                    <div className='space-y-3'>
+                      {cart.map((item) => (
+                        <div key={item.id} className='flex items-start gap-3 p-3 rounded-lg border'>
+                          <div className='flex-1 min-w-0'>
+                            <p className='font-medium'>{item.name}</p>
+                            {item.category && (
+                              <Badge variant='secondary' className='text-xs mt-1'>
+                                {item.category.name}
+                              </Badge>
+                            )}
+                            <p className='text-sm text-muted-foreground mt-1 tabular-nums'>
+                              ฿
+                              {parseFloat(item.sellingPrice).toLocaleString("en-US", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}{" "}
+                              each
+                            </p>
+                          </div>
+                          <div className='flex items-center gap-2'>
+                            <Button
+                              variant='outline'
+                              size='icon'
+                              className='h-8 w-8'
+                              onClick={() => updateQuantity(item.id, -1)}
+                            >
+                              <Minus className='h-4 w-4' />
+                            </Button>
+                            <span className='w-8 text-center font-medium tabular-nums'>
+                              {item.quantity}
+                            </span>
+                            <Button
+                              variant='outline'
+                              size='icon'
+                              className='h-8 w-8'
+                              onClick={() => updateQuantity(item.id, 1)}
+                            >
+                              <Plus className='h-4 w-4' />
+                            </Button>
+                            <Button
+                              variant='ghost'
+                              size='icon'
+                              className='h-8 w-8 text-destructive'
+                              onClick={() => removeFromCart(item.id)}
+                            >
+                              <Trash2 className='h-4 w-4' />
+                            </Button>
+                          </div>
+                          <div className='text-right'>
+                            <p className='font-bold tabular-nums'>
+                              ฿
+                              {(parseFloat(item.sellingPrice) * item.quantity).toLocaleString("en-US", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </ScrollArea>
+              </ScrollArea>
+            </div>
 
+            {/* Fixed footer section */}
             {cart.length > 0 && (
-              <>
-                <Separator className='my-4' />
-                <div className='space-y-3'>
+              <div className='shrink-0 border-t px-4 py-3 bg-background'>
+                <div className='space-y-2'>
                   <div className='flex justify-between items-center'>
-                    <span className='text-lg font-medium'>Subtotal</span>
-                    <span className='text-2xl font-bold tabular-nums'>
+                    <span className='text-base font-medium'>Subtotal</span>
+                    <span className='text-xl font-bold tabular-nums'>
                       ฿
                       {subtotal.toLocaleString("en-US", {
                         minimumFractionDigits: 2,
@@ -506,25 +517,25 @@ export function CheckoutView({ products }: CheckoutViewProps) {
                     </span>
                   </div>
 
-                  <div className='space-y-2'>
-                    <Label className='text-sm font-medium'>Payment Method</Label>
-                    <div className='grid grid-cols-3 gap-2'>
+                  <div className='space-y-1.5'>
+                    <Label className='text-xs font-medium'>Payment Method</Label>
+                    <div className='grid grid-cols-3 gap-1.5'>
                       <div
                         onClick={() => setPaymentMethod("cash")}
                         className={cn(
-                          "flex flex-col items-center justify-center gap-2 p-4 rounded-lg border-2 cursor-pointer transition-all hover:bg-accent",
+                          "flex flex-col items-center justify-center gap-1 p-2 rounded-lg border-2 cursor-pointer transition-all hover:bg-accent",
                           paymentMethod === "cash"
                             ? "border-primary bg-primary/10"
                             : "border-border"
                         )}
                       >
-                        <Banknote className='h-6 w-6' />
-                        <span className='text-sm font-medium'>เงินสด</span>
+                        <Banknote className='h-5 w-5' />
+                        <span className='text-xs font-medium'>เงินสด</span>
                       </div>
                       <div
                         onClick={() => setPaymentMethod("promptpay")}
                         className={cn(
-                          "flex flex-col items-center justify-center gap-2 p-4 rounded-lg border-2 cursor-pointer transition-all hover:bg-accent",
+                          "flex flex-col items-center justify-center gap-1 p-2 rounded-lg border-2 cursor-pointer transition-all hover:bg-accent",
                           paymentMethod === "promptpay"
                             ? "border-primary bg-primary/10"
                             : "border-border"
@@ -535,14 +546,14 @@ export function CheckoutView({ products }: CheckoutViewProps) {
                           alt='พร้อมเพย์'
                           width={100}
                           height={100}
-                          className='h-8 w-8'
+                          className='h-6 w-6'
                         />
-                        <span className='text-sm font-medium'>พร้อมเพย์</span>
+                        <span className='text-xs font-medium'>พร้อมเพย์</span>
                       </div>
                       <div
                         onClick={() => setPaymentMethod("khonlakhrueng")}
                         className={cn(
-                          "flex flex-col items-center justify-center gap-2 p-4 rounded-lg border-2 cursor-pointer transition-all hover:bg-accent",
+                          "flex flex-col items-center justify-center gap-1 p-2 rounded-lg border-2 cursor-pointer transition-all hover:bg-accent",
                           paymentMethod === "khonlakhrueng"
                             ? "border-primary bg-primary/10"
                             : "border-border"
@@ -553,21 +564,21 @@ export function CheckoutView({ products }: CheckoutViewProps) {
                           alt='คนละครึ่ง'
                           width={100}
                           height={100}
-                          className='h-8 w-8'
+                          className='h-6 w-6'
                         />
-                        <span className='text-sm font-medium'>คนละครึ่ง</span>
+                        <span className='text-xs font-medium'>คนละครึ่ง</span>
                       </div>
                     </div>
                   </div>
 
                   {/* Amount Paid Input (Cash only) */}
                   {paymentMethod === "cash" && (
-                    <div className='space-y-2'>
-                      <Label htmlFor='amountPaid' className='text-sm font-medium'>
+                    <div className='space-y-1.5'>
+                      <Label htmlFor='amountPaid' className='text-xs font-medium'>
                         Amount Paid
                       </Label>
                       <div className='relative'>
-                        <span className='absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground'>
+                        <span className='absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm'>
                           ฿
                         </span>
                         <Input
@@ -579,15 +590,15 @@ export function CheckoutView({ products }: CheckoutViewProps) {
                           placeholder='0.00'
                           value={amountPaid}
                           onChange={(e) => setAmountPaid(e.target.value)}
-                          className='pl-6 text-lg h-12 tabular-nums'
+                          className='pl-6 text-base h-9 tabular-nums'
                         />
                       </div>
                       {amountPaid && !isNaN(parseFloat(amountPaid)) && parseFloat(amountPaid) >= subtotal && (
-                        <div className='flex justify-between items-center p-3 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800'>
-                          <span className='text-sm font-medium text-green-900 dark:text-green-100'>
+                        <div className='flex justify-between items-center p-2 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800'>
+                          <span className='text-xs font-medium text-green-900 dark:text-green-100'>
                             Change
                           </span>
-                          <span className='text-xl font-bold text-green-900 dark:text-green-100 tabular-nums'>
+                          <span className='text-base font-bold text-green-900 dark:text-green-100 tabular-nums'>
                             ฿
                             {(parseFloat(amountPaid) - subtotal).toLocaleString("en-US", {
                               minimumFractionDigits: 2,
@@ -600,8 +611,7 @@ export function CheckoutView({ products }: CheckoutViewProps) {
                   )}
 
                   <Button
-                    className='w-full'
-                    size='lg'
+                    className='w-full h-9'
                     onClick={handleCompletePurchase}
                     disabled={isPending}
                   >
@@ -609,14 +619,15 @@ export function CheckoutView({ products }: CheckoutViewProps) {
                   </Button>
                   <Button
                     variant='outline'
-                    className='w-full'
+                    className='w-full h-8'
+                    size='sm'
                     onClick={() => setCart([])}
                     disabled={isPending}
                   >
                     Clear Cart
                   </Button>
                 </div>
-              </>
+              </div>
             )}
           </CardContent>
         </Card>

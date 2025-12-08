@@ -13,6 +13,9 @@ export interface DashboardStats {
   salesChange: number;
   productsChange: number;
   profitChange: number;
+  todayRevenue: number;
+  todaySales: number;
+  todayProfit: number;
 }
 
 export interface SalesOverTime {
@@ -122,6 +125,35 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     ? ((currentProfit - previousProfit) / previousProfit) * 100
     : currentProfit > 0 ? 100 : 0;
 
+  // Today's stats
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const todayStats = await db
+    .select({
+      totalRevenue: sql<number>`COALESCE(SUM(CAST(${sale.totalAmount} AS DECIMAL)), 0)`,
+      totalSales: sql<number>`COUNT(${sale.id})`,
+    })
+    .from(sale)
+    .where(gte(sale.createdAt, startOfToday));
+
+  // Today's profit
+  const todayProfitData = await db
+    .select({
+      revenue: sql<number>`CAST(${saleItem.unitPrice} AS DECIMAL) * ${saleItem.quantity}`,
+      cost: sql<number>`CAST(${product.costPrice} AS DECIMAL) * ${saleItem.quantity}`,
+    })
+    .from(saleItem)
+    .innerJoin(sale, eq(saleItem.saleId, sale.id))
+    .innerJoin(product, eq(saleItem.productId, product.id))
+    .where(gte(sale.createdAt, startOfToday));
+
+  const todayProfit = todayProfitData.reduce((sum, item) => {
+    return sum + (item.revenue - item.cost);
+  }, 0);
+
+  const today = todayStats[0] || { totalRevenue: 0, totalSales: 0 };
+
   return {
     totalRevenue: current.totalRevenue,
     totalSales: current.totalSales,
@@ -131,6 +163,9 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     salesChange,
     productsChange: 0, // Would need historical data to calculate
     profitChange,
+    todayRevenue: today.totalRevenue,
+    todaySales: today.totalSales,
+    todayProfit: todayProfit,
   };
 }
 
