@@ -17,13 +17,36 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 
+interface Product {
+  id: string;
+  name: string;
+  barcode: string | null;
+  categoryId: string | null;
+  lotId: string | null;
+  costPrice: string;
+  sellingPrice: string;
+  stockQuantity: number;
+  isSold: boolean;
+  category: {
+    id: string;
+    name: string;
+  } | null;
+  lot: {
+    id: string;
+    supplier: {
+      id: string;
+      name: string;
+    };
+  } | null;
+}
+
 interface ScannedItem {
-  product: any;
+  product: Product;
   quantityToAdd: number;
 }
 
 interface AddStockViewProps {
-  products: any[];
+  products: Product[];
 }
 
 export function AddStockView({ products }: AddStockViewProps) {
